@@ -1,0 +1,271 @@
+// Prisma schema — Lessons platform MVP
+// Dev datasource: SQLite (zero external services). Production: switch to PostgreSQL
+// (provider = "postgresql") — see README / docs_lessons/proposal.md §3.
+//
+// SQLite notes: no native enums / scalar lists. Enum-like fields are plain strings
+// (documented inline), list-like fields are comma-separated or related tables.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------
+// Platform-level configuration (edited in Admin → Settings, see §4.2)
+// ------------------------------------------------------------------
+
+model PlatformSettings {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g. "commission.defaultRate"
+  value     String // stored as string; parsed by type at read time
+  group     String // "monetization" | "payments" | "refunds" | "fiscal" | "ai" | "legal" | "branding" | "content"
+  label     String? // human label for the settings UI
+  type      String   @default("string") // "string" | "number" | "boolean" | "json"
+  updatedAt DateTime @updatedAt
+}
+
+model SettingsAudit {
+  id        String   @id @default(cuid())
+  key       String
+  oldValue  String?
+  newValue  String?
+  changedBy String? // user id / email
+  createdAt DateTime @default(now())
+}
+
+// Subscription tariffs (configurable in Admin → Settings)
+model Plan {
+  id                     String   @id @default(cuid())
+  name                   String
+  priceKopecks           Int      @default(0) // monthly subscription price, in kopecks
+  maxStudents            Int      @default(0) // 0 = unlimited
+  maxCourses             Int      @default(0)
+  storageMb              Int      @default(0)
+  commissionRateOverride Float? // overrides platform default commission for this plan
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  tenants                Tenant[]
+}
+
+// ------------------------------------------------------------------
+// Tenancy — each tutor/organization is a Tenant. tenantId scopes data.
+// ------------------------------------------------------------------
+
+model Tenant {
+  id                     String   @id @default(cuid())
+  name                   String
+  slug                   String   @unique
+  status                 String   @default("active") // active | suspended
+  commissionRateOverride Float? // per-tenant commission override
+  planId                 String?
+  plan                   Plan?    @relation(fields: [planId], references: [id])
+  createdAt              DateTime @default(now())
+
+  users         User[]
+  tutorProfiles TutorProfile[]
+  courses       Course[]
+  enrollments   Enrollment[]
+  leads         Lead[]
+  payments      Payment[]
+  payouts       Payout[]
+  payoutAccts   PayoutAccount[]
+  subscription  Subscription?
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  tenantId         String   @unique
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status           String   @default("trialing") // trialing | active | past_due | canceled
+  provider         String   @default("yookassa")
+  currentPeriodEnd DateTime?
+  createdAt        DateTime @default(now())
+}
+
+// ------------------------------------------------------------------
+// Users & roles
+// ------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String // "tutor" | "student" | "admin"
+  tenantId     String? // null for platform admin; set for tutor & their students
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id])
+  createdAt    DateTime @default(now())
+
+  tutorProfile   TutorProfile?
+  coursesAsTutor Course[]       @relation("CourseTutor")
+  enrollments    Enrollment[]
+  payments       Payment[]
+  payouts        Payout[]
+  payoutAccount  PayoutAccount?
+}
+
+model TutorProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  headline  String   @default("")
+  bio       String   @default("")
+  subjects  String   @default("") // comma-separated subjects
+  createdAt DateTime @default(now())
+}
+
+// ------------------------------------------------------------------
+// Courses → Modules → Lessons → Assignments
+// ------------------------------------------------------------------
+
+model Course {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tutorId      String
+  tutor        User     @relation("CourseTutor", fields: [tutorId], references: [id])
+  title        String
+  goal         String   @default("") // learning goal — used by AI generation later
+  level        String   @default("") // e.g. "beginner" | "5th grade"
+  ageGroup     String   @default("")
+  subject      String   @default("")
+  priceKopecks Int      @default(0)
+  status       String   @default("draft") // draft | published
+  isDemo       Boolean  @default(false) // shown on public catalog
+  createdAt    DateTime @default(now())
+
+  modules     Module[]
+  enrollments Enrollment[]
+  payments    Payment[]
+}
+
+model Module {
+  id       String   @id @default(cuid())
+  courseId String
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  order    Int      @default(0)
+  title    String
+  lessons  Lesson[]
+}
+
+model Lesson {
+  id        String   @id @default(cuid())
+  moduleId  String
+  module    Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  order     Int      @default(0)
+  title     String
+  content   String   @default("") // markdown body
+  diagram   String   @default("") // optional Mermaid diagram source
+
+  assignments Assignment[]
+  progress    Progress[]
+}
+
+model Assignment {
+  id       String @id @default(cuid())
+  lessonId String
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title    String
+  type     String @default("text") // text | quiz | file
+  payload  String @default("") // JSON-encoded task body
+}
+
+// ------------------------------------------------------------------
+// Enrollment & progress
+// ------------------------------------------------------------------
+
+model Enrollment {
+  id          String     @id @default(cuid())
+  tenantId    String
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  status      String     @default("active") // active | completed | paused
+  progressPct Int        @default(0)
+  createdAt   DateTime   @default(now())
+  progress    Progress[]
+
+  @@unique([studentId, courseId])
+}
+
+model Progress {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lessonId     String
+  lesson       Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  status       String     @default("not_started") // not_started | done
+  score        Int?
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([enrollmentId, lessonId])
+}
+
+// ------------------------------------------------------------------
+// Leads (new client requests)
+// ------------------------------------------------------------------
+
+model Lead {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  contact   String // email or phone
+  message   String   @default("")
+  status    String   @default("new") // new | contacted | converted | closed
+  createdAt DateTime @default(now())
+}
+
+// ------------------------------------------------------------------
+// Payments (Stage 2). commissionRate is snapshotted at payment time.
+// ------------------------------------------------------------------
+
+model Payment {
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  studentId         String
+  student           User     @relation(fields: [studentId], references: [id])
+  courseId          String?
+  course            Course?  @relation(fields: [courseId], references: [id])
+  amountKopecks     Int
+  commissionRate    Float // snapshot of the rate at payment time
+  commissionKopecks Int
+  tutorShareKopecks Int
+  status            String   @default("pending") // pending | succeeded | refunded | failed
+  provider          String   @default("yookassa")
+  receiptUrl        String?
+  createdAt         DateTime @default(now())
+}
+
+model Payout {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tutorId       String
+  tutor         User     @relation(fields: [tutorId], references: [id])
+  amountKopecks Int
+  period        String // e.g. "2026-06"
+  status        String   @default("pending") // pending | paid | failed
+  createdAt     DateTime @default(now())
+}
+
+model PayoutAccount {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tutorId   String   @unique
+  tutor     User     @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  type      String   @default("self_employed") // self_employed | ip | individual
+  inn       String   @default("")
+  details   String   @default("") // bank/card details (encrypted in prod)
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #d9e6ff;
+  --color-brand-200: #bcd2ff;
+  --color-brand-300: #8eb4ff;
+  --color-brand-400: #598bff;
+  --color-brand-500: #3563ff;
+  --color-brand-600: #1f43f5;
+  --color-brand-700: #1933e1;
+  --color-brand-800: #1b2db6;
+  --color-brand-900: #1c2c8f;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Semantic theme tokens — overridden under html.dark for dark mode. */
+:root {
+  --color-bg: #f7f8fb;
+  --color-surface: #ffffff;
+  --color-border: #eceef3;
+  --color-track: #eef0f4;
+  --color-ink: #0f1729;
+  --color-muted: #5b6478;
+  color-scheme: light;
+}
+
+html.dark {
+  --color-bg: #0b1020;
+  --color-surface: #141b2e;
+  --color-border: #232c44;
+  --color-track: #1e2740;
+  --color-ink: #e8ecf6;
+  --color-muted: #9aa6c0;
+  /* tinted accent surfaces so brand-50/100 backgrounds read well on dark */
+  --color-brand-50: #16224a;
+  --color-brand-100: #1e2c59;
+  color-scheme: dark;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.2s, color 0.2s;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Reusable component classes (no external UI library). All adapt to theme. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.625rem;
+  padding: 0.55rem 1rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.btn-primary {
+  background: var(--color-brand-600);
+  color: white;
+}
+.btn-primary:hover {
+  background: var(--color-brand-700);
+}
+.btn-ghost {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-ink);
+}
+.btn-ghost:hover {
+  border-color: var(--color-brand-300);
+}
+.btn-danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+html.dark .btn-danger {
+  background: #3a1820;
+  color: #ff8a93;
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.875rem;
+  box-shadow: 0 1px 2px rgba(16, 23, 41, 0.04);
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 0.625rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.9rem;
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.input:focus,
+.textarea:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--color-brand-500);
+  box-shadow: 0 0 0 3px var(--color-brand-100);
+}
+
+.label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  margin-bottom: 0.35rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.badge-green { background: #e7f7ed; color: #1a7f44; }
+.badge-amber { background: #fff4e0; color: #b25e09; }
+.badge-gray  { background: #eef0f4; color: #5b6478; }
+.badge-brand { background: var(--color-brand-100); color: var(--color-brand-700); }
+
+html.dark .badge-green { background: #112c1d; color: #5fd08a; }
+html.dark .badge-amber { background: #352713; color: #e7b15c; }
+html.dark .badge-gray  { background: #222b40; color: #9aa6c0; }
+html.dark .badge-brand { background: var(--color-brand-100); color: #9db4ff; }
